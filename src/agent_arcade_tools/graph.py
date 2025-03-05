@@ -1,18 +1,21 @@
-import os
-from datetime import datetime, timezone
-from typing import cast, Dict, Any, List, Union, Sequence, Callable
+"""Define the workflow graph and control flow for the agent."""
 
-from agent_arcade_tools.configuration import AgentConfigurable
+import os
+from datetime import UTC, datetime
+from typing import Any, Callable, Dict, List, Sequence, Union, cast
+
 from langchain_arcade import ArcadeToolManager
+from langchain_core.messages import AIMessage
+from langchain_core.runnables import Runnable, RunnableConfig
+from langchain_core.tools import BaseTool
 from langgraph.errors import NodeInterrupt
 from langgraph.graph import END, START, StateGraph
-from langchain_core.messages import AIMessage
 from langgraph.prebuilt import ToolNode
-from langchain_core.runnables import RunnableConfig, Runnable
-from langchain_core.tools import BaseTool
+
+from agent_arcade_tools.configuration import AgentConfigurable
 from agent_arcade_tools.state import InputState, State
-from agent_arcade_tools.utils import load_chat_model
 from agent_arcade_tools.tools import retrieve_instructional_materials
+from agent_arcade_tools.utils import load_chat_model
 
 # Initialize the Arcade Tool Manager with your API key
 arcade_api_key = os.getenv("ARCADE_API_KEY")
@@ -50,7 +53,7 @@ async def call_model(
 
     # Format the system prompt. Customize this to change the agent's behavior.
     system_message = configuration.system_prompt.format(
-        system_time=datetime.now(tz=timezone.utc).isoformat()
+        system_time=datetime.now(tz=UTC).isoformat()
     )
 
     # Get the model's response
@@ -90,7 +93,15 @@ async def call_model(
 
 
 def should_continue(state: State, config: Dict[str, Any]) -> str:
-    """Function to determine the next step based on the model's response"""
+    """Determine the next step based on the model's response.
+
+    Args:
+        state: The current state of the conversation.
+        config: Configuration dictionary containing runtime settings.
+
+    Returns:
+        str: The next step in the workflow, either 'check_auth' or END.
+    """
     last_message = state.messages[-1]
     if (
         isinstance(last_message, AIMessage)
@@ -121,7 +132,18 @@ async def check_auth(state: State, config: Dict[str, Any]) -> State:
 
 
 async def authorize(state: State, config: Dict[str, Any]) -> State:
-    """Function to handle tool authorization"""
+    """Handle tool authorization and user interaction.
+
+    Args:
+        state: The current state of the conversation.
+        config: Configuration dictionary containing runtime settings.
+
+    Returns:
+        State: Updated state after authorization handling.
+
+    Raises:
+        NodeInterrupt: If user authorization is required.
+    """
     user_id = config["configurable"].get("user_id")
     last_message = state.messages[-1]
     if (

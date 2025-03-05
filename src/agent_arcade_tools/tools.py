@@ -6,16 +6,16 @@ These tools are intended as free examples to get started. For production use,
 consider implementing more robust and specialized tools tailored to your needs.
 """
 
-import os
 import logging
-from typing import Any, List, Optional, Dict, cast
-from dotenv import load_dotenv
+import os
+from typing import Any, Dict, List, Optional, cast
 
+from dotenv import load_dotenv
+from langchain_community.vectorstores.azuresearch import AzureSearch
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import InjectedToolArg
-from typing_extensions import Annotated
 from langchain_openai import OpenAIEmbeddings
-from langchain_community.vectorstores.azuresearch import AzureSearch
+from typing_extensions import Annotated
 
 # Load environment variables from .env file
 load_dotenv()

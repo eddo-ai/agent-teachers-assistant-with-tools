@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Sequence, Optional
+from typing import Optional, Sequence
 
 from langchain_core.messages import AnyMessage
 from langgraph.graph import add_messages
