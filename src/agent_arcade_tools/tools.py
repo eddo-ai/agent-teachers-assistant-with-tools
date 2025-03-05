@@ -8,7 +8,7 @@ consider implementing more robust and specialized tools tailored to your needs.
 
 import os
 import logging
-from typing import Any, List, Optional, Dict
+from typing import Any, List, Optional, Dict, cast
 from dotenv import load_dotenv
 
 from langchain_core.runnables import RunnableConfig
@@ -59,12 +59,17 @@ async def retrieve_instructional_materials(
     # Initialize Azure Search client
     embeddings = OpenAIEmbeddings()
     retriever = AzureSearch(
-        azure_search_endpoint=endpoint,
-        azure_search_key=api_key,
-        index_name=index_name,
+        azure_search_endpoint=cast(str, endpoint),
+        azure_search_key=cast(str, api_key),
+        index_name=cast(str, index_name),
         embedding_function=embeddings,
     ).as_retriever(
         search_type="semantic_hybrid",
         semantic_configuration_name=semantic_config,
     )
-    return retriever.get_relevant_documents(query)
+
+    # Convert Document objects to dictionaries
+    documents = retriever.get_relevant_documents(query)
+    return [
+        {"content": doc.page_content, "metadata": doc.metadata} for doc in documents
+    ]
