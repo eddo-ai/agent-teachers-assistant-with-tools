@@ -1,0 +1,28 @@
+[project]
+name = "agent-arcade-tools"
+version = "0.1.0"
+description = "Add your description here"
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = [
+    "langgraph>=0.2.6",
+    "python-dotenv>=1.0.1",
+    "langchain-arcade>=1.1.0",
+    "langchain>=0.3.20",
+    "openai>=1.65.3",
+    "langchain-openai>=0.3.7",
+    "langchain-community>=0.3.19",
+]
+
+[project.optional-dependencies]
+dev = ["mypy>=1.11.1", "ruff>=0.6.1"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.uv]
+dev-dependencies = [
+    "langgraph-cli[inmem]>=0.1.74",
+]
+

@@ -1,0 +1,11 @@
+{
+  "dockerfile_lines": [],
+  "graphs": {
+    "graph": "src/agent_arcade_tools/graph.py:graph"
+  },
+  "env": ".env",
+  "python_version": "3.12",
+  "dependencies": [
+    "./src"
+  ]
+}
