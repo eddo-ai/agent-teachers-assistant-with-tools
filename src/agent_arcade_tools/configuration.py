@@ -11,7 +11,7 @@ from agent_arcade_tools import prompts
 
 
 @dataclass(kw_only=True)
-class AgentConfigurable:
+class Configuration:
     """The configuration for the agent."""
 
     system_prompt: str = field(
@@ -44,10 +44,17 @@ class AgentConfigurable:
         },
     )
 
+    thread_id: Optional[str] = field(
+        default=None,
+        metadata={
+            "description": "The thread ID to use for tool authorization. Required for tools that need authentication."
+        },
+    )
+
     @classmethod
     def from_runnable_config(
         cls, config: Optional[RunnableConfig] = None
-    ) -> AgentConfigurable:
+    ) -> Configuration:
         """Create a Configuration instance from a RunnableConfig object."""
         config = ensure_config(config)
         configurable = config.get("configurable") or {}
