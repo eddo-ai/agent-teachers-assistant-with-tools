@@ -43,7 +43,7 @@ def call_agent(
     model: str = configurable.model
     logger.info(f"Using model: {model}")
     model_with_tools: Runnable = load_chat_model(model).bind_tools(tools)
-    logger.info(f"Model with tools: {model_with_tools}")
+    logger.debug(f"Model with tools: {model_with_tools}")
     messages: Sequence[BaseMessage] = state["messages"]
     response: BaseMessage = model_with_tools.invoke(messages)
     # Return the updated message history
