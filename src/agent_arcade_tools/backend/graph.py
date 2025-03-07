@@ -14,9 +14,9 @@ from langgraph.graph import END, START, MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode
 from langgraph.types import interrupt
 
-from agent_arcade_tools.configuration import AgentConfigurable
-from agent_arcade_tools.tools import retrieve_instructional_materials
-from agent_arcade_tools.utils import load_chat_model
+from agent_arcade_tools.backend.configuration import AgentConfigurable
+from agent_arcade_tools.backend.tools import retrieve_instructional_materials
+from agent_arcade_tools.backend.utils import load_chat_model
 
 logger: logging.Logger = logging.getLogger(__name__)
 
@@ -37,7 +37,7 @@ tool_node = ToolNode(tools)
 
 def call_agent(
     state: MessagesState, config: RunnableConfig
-):  # -> dict[str, list[Any | BaseMessage]]:# -> dict[str, list[Any | BaseMessage]]:# -> dict[str, list[Any | BaseMessage]]:# -> dict[str, list[Any | BaseMessage]]:# -> dict[str, list[Any | BaseMessage]]:
+) -> dict[str, list[BaseMessage]]:
     """Call the agent and get a response."""
     configurable: AgentConfigurable = AgentConfigurable.from_runnable_config(config)
     model: str = configurable.model
@@ -46,11 +46,11 @@ def call_agent(
     logger.debug(f"Model with tools: {model_with_tools}")
     messages: Sequence[BaseMessage] = state["messages"]
     response: BaseMessage = model_with_tools.invoke(messages)
-    # Return the updated message history
-    return {"messages": [response]}
+    # Return all messages including the new response
+    return {"messages": [*messages, response]}
 
 
-def should_continue(state: MessagesState):
+def should_continue(state: MessagesState) -> str:
     """Determine the next step in the workflow based on the last message."""
     if not isinstance(state["messages"][-1], AIMessage):
         return END
@@ -98,6 +98,19 @@ def authorize(
                     raise ValueError("Tool authorization failed")
 
     return {"messages": []}
+
+
+# Function to handle tool responses
+def handle_tools(state: MessagesState) -> dict[str, Sequence[BaseMessage]]:
+    """Execute tools and add their responses to the message history."""
+    if not isinstance(state["messages"][-1], AIMessage):
+        return {"messages": state["messages"]}
+
+    # Get the tool responses from the tool node
+    tool_response = tool_node.invoke(state)
+
+    # Combine existing messages with tool responses
+    return {"messages": [*state["messages"], *tool_response["messages"]]}
 
 
 # Build the workflow graph using StateGraph
