@@ -1,5 +1,6 @@
 """Define the workflow graph and control flow for the agent."""
 
+import logging
 import os
 from typing import Any, Callable, Dict, Sequence, Union, cast
 
@@ -16,6 +17,8 @@ from langgraph.types import interrupt
 from agent_arcade_tools.configuration import AgentConfigurable
 from agent_arcade_tools.tools import retrieve_instructional_materials
 from agent_arcade_tools.utils import load_chat_model
+
+logger: logging.Logger = logging.getLogger(__name__)
 
 # Initialize the Arcade Tool Manager with your API key
 arcade_api_key: str | None = os.getenv("ARCADE_API_KEY")
@@ -37,9 +40,10 @@ def call_agent(
 ):  # -> dict[str, list[Any | BaseMessage]]:# -> dict[str, list[Any | BaseMessage]]:# -> dict[str, list[Any | BaseMessage]]:# -> dict[str, list[Any | BaseMessage]]:# -> dict[str, list[Any | BaseMessage]]:
     """Call the agent and get a response."""
     configurable: AgentConfigurable = AgentConfigurable.from_runnable_config(config)
-    model: str = configurable.model or "openai/gpt-4o"
+    model: str = configurable.model
+    logger.info(f"Using model: {model}")
     model_with_tools: Runnable = load_chat_model(model).bind_tools(tools)
-
+    logger.info(f"Model with tools: {model_with_tools}")
     messages: Sequence[BaseMessage] = state["messages"]
     response: BaseMessage = model_with_tools.invoke(messages)
     # Return the updated message history
@@ -116,3 +120,7 @@ memory = MemorySaver()
 
 # Compile the graph with the checkpointer
 graph = workflow.compile(checkpointer=memory)
+
+if __name__ == "__main__":
+    graph.get_graph().draw_mermaid_png()
+    graph.get_graph().draw_mermaid_png(output_file_path="graph.png")

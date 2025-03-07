@@ -23,7 +23,7 @@ class AgentConfigurable:
     )
 
     model: Annotated[str, {"__template_metadata__": {"kind": "llm"}}] = field(
-        default="openai/gpt-4o",
+        default="azure_openai/gpt-4o-mini",
         metadata={
             "description": "The name of the language model to use for the agent's main interactions. "
             "Should be in the form: provider/model-name."
@@ -50,6 +50,6 @@ class AgentConfigurable:
     ) -> AgentConfigurable:
         """Create a Configuration instance from a RunnableConfig object."""
         config = ensure_config(config)
-        configurable = config.get("configurable") or {}
+        configurable = config.get("configurable", {}) if config else {}
         _fields = {f.name for f in fields(cls) if f.init}
         return cls(**{k: v for k, v in configurable.items() if k in _fields})
