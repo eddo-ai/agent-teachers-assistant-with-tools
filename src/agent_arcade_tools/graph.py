@@ -1,180 +1,118 @@
 """Define the workflow graph and control flow for the agent."""
 
 import os
-from datetime import UTC, datetime
-from typing import Any, Callable, Dict, List, Sequence, Union, cast
+from typing import Any, Callable, Dict, Sequence, Union, cast
 
+from arcadepy.types.shared.authorization_response import AuthorizationResponse
 from langchain_arcade import ArcadeToolManager
-from langchain_core.messages import AIMessage
+from langchain_core.messages import AIMessage, BaseMessage
 from langchain_core.runnables import Runnable, RunnableConfig
 from langchain_core.tools import BaseTool
-from langgraph.errors import NodeInterrupt
-from langgraph.graph import END, START, StateGraph
+from langgraph.checkpoint.memory import MemorySaver
+from langgraph.graph import END, START, MessagesState, StateGraph
 from langgraph.prebuilt import ToolNode
+from langgraph.types import interrupt
 
 from agent_arcade_tools.configuration import AgentConfigurable
-from agent_arcade_tools.state import InputState, State
 from agent_arcade_tools.tools import retrieve_instructional_materials
 from agent_arcade_tools.utils import load_chat_model
 
 # Initialize the Arcade Tool Manager with your API key
-arcade_api_key = os.getenv("ARCADE_API_KEY")
-openai_api_key = os.getenv("OPENAI_API_KEY")
+arcade_api_key: str | None = os.getenv("ARCADE_API_KEY")
+openai_api_key: str | None = os.getenv("OPENAI_API_KEY")
 
-toolkit = ArcadeToolManager(api_key=cast(Dict[str, Any], arcade_api_key))
+tool_manager = ArcadeToolManager(api_key=cast(Dict[str, Any], arcade_api_key))
 configuration = AgentConfigurable()
 
 # Retrieve tools compatible with LangGraph
 tools: Sequence[Union[BaseTool, Callable[..., Any]]] = [
     retrieve_instructional_materials,
-    *toolkit.get_tools(),
+    *tool_manager.get_tools(toolkits=["Google", "Github", "Search"]),
 ]
 tool_node = ToolNode(tools)
 
 
-async def call_model(
-    state: State, config: RunnableConfig
-) -> Dict[str, List[AIMessage]]:
-    """Call the LLM powering our "agent".
+def call_agent(
+    state: MessagesState, config: RunnableConfig
+):  # -> dict[str, list[Any | BaseMessage]]:# -> dict[str, list[Any | BaseMessage]]:# -> dict[str, list[Any | BaseMessage]]:# -> dict[str, list[Any | BaseMessage]]:# -> dict[str, list[Any | BaseMessage]]:
+    """Call the agent and get a response."""
+    configurable: AgentConfigurable = AgentConfigurable.from_runnable_config(config)
+    model: str = configurable.model or "openai/gpt-4o"
+    model_with_tools: Runnable = load_chat_model(model).bind_tools(tools)
 
-    This function prepares the prompt, initializes the model, and processes the response.
-
-    Args:
-        state (State): The current state of the conversation.
-        config (RunnableConfig): Configuration for the model run.
-
-    Returns:
-        dict: A dictionary containing the model's response message.
-    """
-    configuration = AgentConfigurable.from_runnable_config(config)
-
-    # Initialize the model with tool binding. Change the model or add more tools here.
-    model = load_chat_model(configuration.model).bind_tools(tools)
-
-    # Format the system prompt. Customize this to change the agent's behavior.
-    system_message = configuration.system_prompt.format(
-        system_time=datetime.now(tz=UTC).isoformat()
-    )
-
-    # Get the model's response
-    response = cast(
-        AIMessage,
-        await model.ainvoke(
-            [{"role": "system", "content": system_message}, *state.messages], config
-        ),
-    )
-
-    # Handle the case when it's the last step and the model still wants to use a tool
-    if (
-        state.is_last_step
-        and isinstance(response, AIMessage)
-        and hasattr(response, "tool_calls")
-        and response.tool_calls
-    ):
-        return {
-            "messages": [
-                AIMessage(
-                    id=response.id,
-                    content="Sorry, I could not find an answer to your question in the specified number of steps.",
-                )
-            ]
-        }
-
-    # If there are tool calls, return them directly without placeholder messages
-    if (
-        isinstance(response, AIMessage)
-        and hasattr(response, "tool_calls")
-        and response.tool_calls
-    ):
-        return {"messages": [response]}
-
-    # Return the model's response as a list to be added to existing messages
+    messages: Sequence[BaseMessage] = state["messages"]
+    response: BaseMessage = model_with_tools.invoke(messages)
+    # Return the updated message history
     return {"messages": [response]}
 
 
-def should_continue(state: State, config: Dict[str, Any]) -> str:
-    """Determine the next step based on the model's response.
-
-    Args:
-        state: The current state of the conversation.
-        config: Configuration dictionary containing runtime settings.
-
-    Returns:
-        str: The next step in the workflow, either 'check_auth' or END.
-    """
-    last_message = state.messages[-1]
-    if (
-        isinstance(last_message, AIMessage)
-        and hasattr(last_message, "tool_calls")
-        and last_message.tool_calls
-    ):
-        return "check_auth"
-    # If no tool calls are present, end the workflow
-    return END
+def should_continue(state: MessagesState):
+    """Determine the next step in the workflow based on the last message."""
+    if not isinstance(state["messages"][-1], AIMessage):
+        return END
+    if state["messages"][-1].tool_calls:
+        for tool_call in state["messages"][-1].tool_calls:
+            if tool_manager.requires_auth(tool_call["name"]):
+                return "authorization"
+        return "tools"  # Proceed to tool execution if no authorization is needed
+    return END  # End the workflow if no tool calls are present
 
 
-async def check_auth(state: State, config: Dict[str, Any]) -> State:
-    """Check if the user has authorized the tool."""
-    user_id = config["configurable"].get("user_id")
-    last_message = state.messages[-1]
-    if (
-        isinstance(last_message, AIMessage)
-        and hasattr(last_message, "tool_calls")
-        and last_message.tool_calls
-    ):
-        tool_name = last_message.tool_calls[0]["name"]
-        auth_response = toolkit.authorize(tool_name, user_id)
+# Function to handle authorization for tools that require it
+def authorize(
+    state: MessagesState, *, config: RunnableConfig | None = None
+) -> dict[str, list[Any]]:
+    """Handle authorization for tools that require it."""
+    configurable = config.get("configurable", {}) if config else {}
+    user_id = configurable.get("user_id")
+    if not user_id:
+        raise ValueError("User ID not found in configuration")
+    if not isinstance(state["messages"][-1], AIMessage):
+        return {"messages": []}
+    for tool_call in state["messages"][-1].tool_calls:
+        tool_name = tool_call["name"]
+        if not tool_manager.requires_auth(tool_name):
+            continue
+        auth_response: AuthorizationResponse = tool_manager.authorize(
+            tool_name, user_id
+        )
         if auth_response.status != "completed":
-            state.auth_url = auth_response.url
-        else:
-            state.auth_url = None
-    return state
+            # Prompt the user to visit the authorization URL
+            interrupt(f"Visit the following URL to authorize: {auth_response.url}")
+
+            # Wait for the user to complete the authorization
+            # and then check the authorization status again
+            if not auth_response.id:
+                raise ValueError(
+                    "No authorization ID returned from authorization request"
+                )
+            if response := tool_manager.wait_for_auth(auth_response.id):
+                if response.status != "completed":
+                    raise ValueError("Authorization request not completed")
+                if not tool_manager.is_authorized(auth_response.id):
+                    # This stops execution if authorization fails
+                    raise ValueError("Tool authorization failed")
+
+    return {"messages": []}
 
 
-async def authorize(state: State, config: Dict[str, Any]) -> State:
-    """Handle tool authorization and user interaction.
+# Build the workflow graph using StateGraph
+workflow = StateGraph(MessagesState, AgentConfigurable)
 
-    Args:
-        state: The current state of the conversation.
-        config: Configuration dictionary containing runtime settings.
-
-    Returns:
-        State: Updated state after authorization handling.
-
-    Raises:
-        NodeInterrupt: If user authorization is required.
-    """
-    user_id = config["configurable"].get("user_id")
-    last_message = state.messages[-1]
-    if (
-        isinstance(last_message, AIMessage)
-        and hasattr(last_message, "tool_calls")
-        and last_message.tool_calls
-    ):
-        tool_name = last_message.tool_calls[0]["name"]
-        auth_response = toolkit.authorize(tool_name, user_id)
-        if auth_response.status != "completed":
-            auth_message = f"Please authorize the application in your browser:\n\n {state.auth_url}"
-            raise NodeInterrupt(auth_message)
-    return state
-
-
-# Build the workflow graph
-workflow = StateGraph(InputState, State)
-
-# Add nodes to the graph
-workflow.add_node("agent", cast(Runnable[Any, Any], call_model))
+# Add nodes (steps) to the graph
+workflow.add_node("agent", call_agent)
+workflow.add_node("authorization", authorize)
 workflow.add_node("tools", tool_node)
-workflow.add_node("authorization", cast(Runnable[Any, Any], authorize))
-workflow.add_node("check_auth", cast(Runnable[Any, Any], check_auth))
-
-# Define the edges and control flow
+# Define the edges and control flow between nodes
 workflow.add_edge(START, "agent")
-workflow.add_conditional_edges("agent", should_continue, ["check_auth", END])
-workflow.add_edge("check_auth", "authorization")
+workflow.add_conditional_edges(
+    "agent", should_continue, ["authorization", "tools", END]
+)
 workflow.add_edge("authorization", "tools")
 workflow.add_edge("tools", "agent")
 
-# Compile the graph with an interrupt after the authorization node
-# so that we can prompt the user to authorize the application
-graph = workflow.compile()
+# Set up memory for checkpointing the state
+memory = MemorySaver()
+
+# Compile the graph with the checkpointer
+graph = workflow.compile(checkpointer=memory)
