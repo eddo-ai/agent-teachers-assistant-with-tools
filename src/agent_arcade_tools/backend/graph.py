@@ -18,7 +18,23 @@ from agent_arcade_tools.backend.configuration import AgentConfigurable
 from agent_arcade_tools.backend.tools import retrieve_instructional_materials
 from agent_arcade_tools.backend.utils import load_chat_model
 
-logger: logging.Logger = logging.getLogger(__name__)
+# Configure logging
+logger = logging.getLogger(__name__)
+formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+handler = logging.StreamHandler()
+handler.setFormatter(formatter)
+logger.addHandler(handler)
+logger.setLevel(logging.DEBUG)  # Set default to DEBUG
+
+
+def set_log_level(level: str) -> None:
+    """Set the log level for the graph module.
+
+    Args:
+        level: One of 'DEBUG', 'INFO', 'WARNING', 'ERROR', 'CRITICAL'
+    """
+    logger.setLevel(getattr(logging, level.upper()))
+
 
 # Initialize the Arcade Tool Manager with your API key
 arcade_api_key: str | None = os.getenv("ARCADE_API_KEY")
@@ -41,11 +57,26 @@ def call_agent(
     """Call the agent and get a response."""
     configurable: AgentConfigurable = AgentConfigurable.from_runnable_config(config)
     model: str = configurable.model
-    logger.info(f"Using model: {model}")
+    logger.info(f"🤖 Using model: {model}")
+
+    # Log the current state
+    logger.debug(f"📥 Input messages: {[msg.content for msg in state['messages']]}")
+
     model_with_tools: Runnable = load_chat_model(model).bind_tools(tools)
-    logger.debug(f"Model with tools: {model_with_tools}")
+    logger.debug(
+        f"🔧 Model configured with tools: {[getattr(tool, 'name', str(tool)) for tool in tools]}"
+    )
+
     messages: Sequence[BaseMessage] = state["messages"]
-    response: BaseMessage = model_with_tools.invoke(messages)
+    logger.debug("🎯 Invoking model with messages and streaming config")
+    response: BaseMessage = model_with_tools.invoke(
+        messages,
+        config=config,  # Pass through the config for streaming callbacks
+    )
+
+    logger.info(f"📤 Model response type: {type(response).__name__}")
+    logger.debug(f"📤 Model response content: {response.content}")
+
     # Return all messages including the new response
     return {"messages": [*messages, response]}
 
@@ -53,16 +84,22 @@ def call_agent(
 def should_continue(state: MessagesState) -> str:
     """Determine the next step in the workflow based on the last message."""
     if not isinstance(state["messages"][-1], AIMessage):
+        logger.debug("🔄 Ending workflow: Last message is not an AI message")
         return END
+
     if state["messages"][-1].tool_calls:
+        logger.info(f"🔧 Found {len(state['messages'][-1].tool_calls)} tool calls")
         for tool_call in state["messages"][-1].tool_calls:
             if tool_manager.requires_auth(tool_call["name"]):
+                logger.info(f"🔐 Tool {tool_call['name']} requires authorization")
                 return "authorization"
+        logger.info("🔧 Proceeding to tool execution")
         return "tools"  # Proceed to tool execution if no authorization is needed
+
+    logger.debug("🔄 Ending workflow: No tool calls present")
     return END  # End the workflow if no tool calls are present
 
 
-# Function to handle authorization for tools that require it
 def authorize(
     state: MessagesState, *, config: RunnableConfig | None = None
 ) -> dict[str, list[Any]]:
@@ -72,7 +109,7 @@ def authorize(
     if not user_id:
         raise ValueError("User ID not found in configuration")
     if not isinstance(state["messages"][-1], AIMessage):
-        return {"messages": []}
+        return {"messages": state["messages"]}
     for tool_call in state["messages"][-1].tool_calls:
         tool_name = tool_call["name"]
         if not tool_manager.requires_auth(tool_name):
@@ -81,11 +118,11 @@ def authorize(
             tool_name, user_id
         )
         if auth_response.status != "completed":
-            # Prompt the user to visit the authorization URL
-            interrupt(f"Visit the following URL to authorize: {auth_response.url}")
+            # Always interrupt with the authorization URL
+            if not auth_response.url:
+                raise ValueError("No authorization URL returned")
 
-            # Wait for the user to complete the authorization
-            # and then check the authorization status again
+            # Check authorization ID before interrupting
             if not auth_response.id:
                 raise ValueError(
                     "No authorization ID returned from authorization request"
@@ -97,10 +134,14 @@ def authorize(
                     # This stops execution if authorization fails
                     raise ValueError("Tool authorization failed")
 
-    return {"messages": []}
+            # Raise the interrupt with the authorization URL
+            raise interrupt(
+                f"Visit the following URL to authorize: {auth_response.url}"
+            )
+
+    return {"messages": state["messages"]}
 
 
-# Function to handle tool responses
 def handle_tools(state: MessagesState) -> dict[str, Sequence[BaseMessage]]:
     """Execute tools and add their responses to the message history."""
     if not isinstance(state["messages"][-1], AIMessage):

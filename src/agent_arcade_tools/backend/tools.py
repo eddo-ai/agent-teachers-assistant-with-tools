@@ -13,7 +13,7 @@ from typing import Any, Dict, List, Optional, cast
 from dotenv import load_dotenv
 from langchain_community.vectorstores.azuresearch import AzureSearch
 from langchain_core.runnables import RunnableConfig
-from langchain_core.tools import InjectedToolArg
+from langchain_core.tools import InjectedToolArg, Tool
 from langchain_openai import OpenAIEmbeddings
 from typing_extensions import Annotated
 
@@ -23,7 +23,7 @@ load_dotenv()
 logger = logging.getLogger(__name__)
 
 
-async def retrieve_instructional_materials(
+async def _retrieve_instructional_materials(
     query: str,
     *,
     config: Annotated[RunnableConfig, InjectedToolArg],
@@ -73,3 +73,10 @@ async def retrieve_instructional_materials(
     return [
         {"content": doc.page_content, "metadata": doc.metadata} for doc in documents
     ]
+
+
+retrieve_instructional_materials = Tool(
+    name="retrieve_instructional_materials",
+    description="Search for instructional materials from OpenSciEd that are relevant to the user's query.",
+    func=_retrieve_instructional_materials,
+)
