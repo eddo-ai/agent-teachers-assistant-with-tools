@@ -3,7 +3,7 @@
 import os
 import uuid
 from datetime import datetime
-from typing import Any, Dict, Optional, cast
+from typing import Any, Dict, Optional, Sequence, cast
 from uuid import UUID
 
 import streamlit as st
@@ -162,7 +162,7 @@ def render_api_debug_info() -> None:
         st.info("No API calls recorded yet")
 
 
-def render_message_details(message: dict) -> None:
+def render_message_details(message: dict[str, Any]) -> None:
     """Render detailed message information in an expander."""
     with st.expander(f"🔍 {message['role'].title()} Message Details", expanded=False):
         st.markdown("#### Content")
@@ -182,7 +182,7 @@ def render_message_details(message: dict) -> None:
             )
 
 
-def render_thread_history(messages: list) -> None:
+def render_thread_history(messages: Sequence[dict[str, Any]]) -> None:
     """Render the thread history with detailed analysis."""
     st.markdown("### Thread Analysis")
 

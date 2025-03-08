@@ -98,7 +98,9 @@ def call_agent(
     # Log the current state
     logger.debug(f"📥 Input messages: {[msg.content for msg in state['messages']]}")
 
-    model_with_tools: Runnable = load_chat_model(model).bind_tools(tools)
+    model_with_tools: Runnable[Sequence[BaseMessage], BaseMessage] = load_chat_model(
+        model
+    ).bind_tools(tools)
     logger.debug(
         f"🔧 Model configured with tools: {[getattr(tool, 'name', str(tool)) for tool in tools]}"
     )
