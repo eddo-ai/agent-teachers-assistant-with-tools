@@ -2,12 +2,15 @@
 
 from __future__ import annotations
 
+import logging
 from dataclasses import dataclass, field, fields
-from typing import Annotated, Optional
+from typing import Annotated, Literal, Optional
 
 from langchain_core.runnables import RunnableConfig, ensure_config
 
-from agent_arcade_tools import prompts
+from agent_arcade_tools.backend import prompts
+
+LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 
 
 @dataclass(kw_only=True)
@@ -44,6 +47,18 @@ class AgentConfigurable:
         },
     )
 
+    debug_mode: bool = field(
+        default=False,
+        metadata={"description": "Enable debug mode for detailed logging."},
+    )
+
+    log_level: LogLevel = field(
+        default="INFO",
+        metadata={
+            "description": "The logging level to use. One of: DEBUG, INFO, WARNING, ERROR, CRITICAL"
+        },
+    )
+
     @classmethod
     def from_runnable_config(
         cls, config: Optional[RunnableConfig] = None
@@ -52,4 +67,14 @@ class AgentConfigurable:
         config = ensure_config(config)
         configurable = config.get("configurable", {}) if config else {}
         _fields = {f.name for f in fields(cls) if f.init}
-        return cls(**{k: v for k, v in configurable.items() if k in _fields})
+        instance = cls(**{k: v for k, v in configurable.items() if k in _fields})
+
+        # Set log level based on configuration
+        log_level = (
+            logging.DEBUG
+            if instance.debug_mode
+            else getattr(logging, instance.log_level)
+        )
+        logging.getLogger("agent_arcade_tools").setLevel(log_level)
+
+        return instance

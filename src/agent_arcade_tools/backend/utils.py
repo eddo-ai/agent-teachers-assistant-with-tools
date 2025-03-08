@@ -1,5 +1,7 @@
 """Utility & helper functions."""
 
+from typing import Any, Dict, List, Union
+
 from langchain.chat_models import init_chat_model
 from langchain_core.language_models import BaseChatModel
 from langchain_core.messages import BaseMessage
@@ -7,13 +9,13 @@ from langchain_core.messages import BaseMessage
 
 def get_message_text(msg: BaseMessage) -> str:
     """Get the text content of a message."""
-    content = msg.content
+    content: Union[str, Dict[str, Any], List[Union[str, Dict[str, Any]]]] = msg.content
     if isinstance(content, str):
         return content
     elif isinstance(content, dict):
-        return content.get("text", "")
+        return str(content.get("text", ""))
     else:
-        txts = [c if isinstance(c, str) else (c.get("text") or "") for c in content]
+        txts = [c if isinstance(c, str) else str(c.get("text", "")) for c in content]
         return "".join(txts).strip()
 
 
