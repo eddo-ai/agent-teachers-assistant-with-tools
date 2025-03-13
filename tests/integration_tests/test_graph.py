@@ -27,10 +27,10 @@ from langchain_core.messages import (
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import Tool
 from langgraph.graph import END, MessagesState
+from langgraph.prebuilt import ToolNode
 from langgraph.types import interrupt
 
 from agent_arcade_tools.graph import (
-    ToolNode,
     call_agent,
     graph,
     handle_tools,

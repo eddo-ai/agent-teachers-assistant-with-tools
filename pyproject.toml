@@ -77,3 +77,8 @@ namespace_packages = true
 explicit_package_bases = true
 mypy_path = "src"
 
+[tool.uv]
+dev-dependencies = [
+    "langgraph-cli[inmem]>=0.1.76",
+]
+
