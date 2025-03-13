@@ -863,7 +863,7 @@ def test_agent_to_authorization_transition(agent_to_auth_checkpoint: dict) -> No
                 assert ai_msg.usage_metadata == expected_ai["usage_metadata"]
 
         # Verify the next node is authorization
-        next_node = should_continue({"messages": response["messages"]})
+        next_node = should_continue({"messages": response["messages"]})  # type: ignore
         assert next_node == "authorization", "Expected transition to authorization node"
 
 
@@ -1136,7 +1136,7 @@ def test_auth_to_tools_error_transition(auth_to_tools_error_checkpoint: dict) ->
         assert "tool_calls" in ai_message.additional_kwargs
 
         # Now, directly test the handle_tools function
-        tools_response = handle_tools(agent_response)
+        tools_response = handle_tools(agent_response)  # type: ignore
 
         # Verify the message history matches exactly
         assert len(tools_response["messages"]) == 3
