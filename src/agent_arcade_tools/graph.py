@@ -22,30 +22,23 @@ Environment Variables:
     OPENAI_API_KEY: API key for OpenAI services
 """
 
-import json
 import logging
 import os
 from typing import Any, Callable, Dict, Sequence, Union, cast
 
 from arcadepy.types.shared.authorization_response import AuthorizationResponse
 from langchain_arcade import ArcadeToolManager
-from langchain_core.messages import (
-    AIMessage,
-    AnyMessage,
-    BaseMessage,
-    ToolMessage,
-)
-from langchain_core.runnables import RunnableConfig
+from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
+from langchain_core.runnables import Runnable, RunnableConfig
 from langchain_core.tools import BaseTool
-from langchain_openai import ChatOpenAI
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, MessagesState, StateGraph
-from langgraph.graph.state import CompiledStateGraph
 from langgraph.prebuilt import ToolNode
 from langgraph.types import interrupt
 
 from agent_arcade_tools.configuration import AgentConfigurable
 from agent_arcade_tools.tools import retrieve_instructional_materials
+from agent_arcade_tools.utils import load_chat_model
 
 # Configure logging
 logger = logging.getLogger(__name__)
@@ -79,134 +72,88 @@ tools: Sequence[Union[BaseTool, Callable[..., Any]]] = [
 ]
 tool_node = ToolNode(tools)
 
-# Initialize the model
-model = ChatOpenAI(
-    model="gpt-4-turbo-preview",
-    temperature=0,
-    streaming=True,
-)
-
-
-def process_messages(messages: Sequence[BaseMessage]) -> list[BaseMessage]:
-    """Process messages to ensure they are in the correct format for the agent.
-
-    Args:
-        messages: The messages to process
-
-    Returns:
-        The processed messages
-    """
-    processed_messages: list[BaseMessage] = []
-
-    logger.debug(f"Processing {len(messages)} messages")
-    for msg in messages:
-        if isinstance(msg, ToolMessage):
-            logger.debug(f"Processing tool message: {msg.name}")
-            # Ensure tool message content is a string
-            content: str = ""
-            msg_content: Any = msg.content
-
-            # Handle different content types
-            if isinstance(msg_content, dict):
-                content = json.dumps(msg_content, indent=2)
-            else:
-                content = str(msg_content)
-
-            processed_messages.append(
-                ToolMessage(
-                    content=content,
-                    name=msg.name,
-                    tool_call_id=msg.tool_call_id,
-                    status=msg.status,
-                )
-            )
-        else:
-            # For non-tool messages, preserve the original format
-            processed_messages.append(msg)
-
-    return processed_messages
-
 
 def call_agent(
-    state: MessagesState, *, config: RunnableConfig | None = None
-) -> MessagesState:
-    """Call the agent with the current conversation state.
+    state: MessagesState, config: RunnableConfig
+) -> dict[str, list[BaseMessage]]:
+    """Process the current state and generate an agent response.
+
+    This function:
+    1. Extracts the model configuration
+    2. Loads and configures the model with available tools
+    3. Processes the message history
+    4. Generates and logs the agent's response
 
     Args:
-        state: Current conversation state containing messages
-        config: Optional configuration containing model info
+        state: Current conversation state containing message history
+        config: Configuration including model settings and user info
 
     Returns:
-        Updated conversation state with agent's response
+        dict: Updated state with the agent's response appended
     """
-    messages = state["messages"]
-    processed_messages = process_messages(messages)
+    configurable: AgentConfigurable = AgentConfigurable.from_runnable_config(config)
+    model: str = configurable.model
+    logger.info(f"🤖 Using model: {model}")
 
-    try:
-        # Use model from config if available, otherwise use default model
-        configurable = config.get("configurable", {}) if config else {}
-        model_name = configurable.get("model")
-        current_model = load_chat_model(model_name) if model_name else model
+    # Log the current state
+    logger.debug(f"📥 Input messages: {[msg.content for msg in state['messages']]}")
 
-        # Invoke the model with the processed messages
-        # Following LangGraph SDK best practices
-        response = current_model.invoke(
-            input=processed_messages,
-            config=RunnableConfig(
-                configurable={"tools": tool_manager.get_tools(), "stream": False}
-            ),
-        )
+    model_with_tools: Runnable[Sequence[BaseMessage], BaseMessage] = load_chat_model(
+        model
+    ).bind_tools(tools)
+    logger.debug(
+        f"🔧 Model configured with tools: {[getattr(tool, 'name', str(tool)) for tool in tools]}"
+    )
 
-        logger.debug(f"Model response: {response}")
-        return MessagesState(
-            messages=cast(list[AnyMessage], processed_messages + [response])
-        )
-    except Exception as e:
-        logger.error(f"Error calling model: {e}")
-        raise
+    messages: Sequence[BaseMessage] = state["messages"]
+    logger.debug("🎯 Invoking model with messages and streaming config")
+    response: BaseMessage = model_with_tools.invoke(
+        messages,
+        config=config,  # Pass through the config for streaming callbacks
+    )
+
+    logger.info(f"📤 Model response type: {type(response).__name__}")
+    logger.debug(f"📤 Model response content: {response.content}")
+
+    # Return all messages including the new response
+    return {"messages": [*messages, response]}
 
 
 def should_continue(state: MessagesState) -> str:
     """Determine the next step in the workflow based on the last message.
 
     This function analyzes the last message to decide the next action:
-    - If last message is a tool message, continue to agent
-    - If last message is not an AI message, end the workflow
-    - If contains tool calls, proceed to tools
-    - If any tool requires auth, go to authorization
+    - If it's a ToolMessage, continue to agent
+    - If not an AI message, end the workflow
+    - If contains tool calls requiring auth, go to authorization
+    - If contains tool calls (no auth needed), proceed to tools
     - Otherwise, end the workflow
 
     Args:
         state: Current conversation state
 
     Returns:
-        str: Next node identifier ('authorization', 'tools', 'agent', or END)
+        str: Next node identifier ('agent', 'authorization', 'tools', or END)
     """
     last_message = state["messages"][-1]
 
-    # If last message is a tool message, continue to agent
+    # If the last message is a ToolMessage, continue to agent
     if isinstance(last_message, ToolMessage):
-        logger.debug("🔄 Continuing to agent: Last message is a tool message")
+        logger.debug("🔄 Tool message detected, continuing to agent")
         return "agent"
 
-    # If not an AI message, end the workflow
     if not isinstance(last_message, AIMessage):
         logger.debug("🔄 Ending workflow: Last message is not an AI message")
         return END
 
-    # Check for tool calls in additional_kwargs
-    tool_calls = last_message.additional_kwargs.get("tool_calls", [])
-    if tool_calls:
-        logger.info(f"🔧 Found {len(tool_calls)} tool calls")
-        # First check if any tool requires authorization
-        for tool_call in tool_calls:
-            tool_name = tool_call["function"]["name"]
-            if tool_manager.requires_auth(tool_name):
-                logger.info(f"🔐 Tool {tool_name} requires authorization")
+    if last_message.tool_calls:
+        logger.info(f"🔧 Found {len(last_message.tool_calls)} tool calls")
+        for tool_call in last_message.tool_calls:
+            if tool_manager.requires_auth(tool_call["name"]):
+                logger.info(f"🔐 Tool {tool_call['name']} requires authorization")
                 return "authorization"
-        # If no tool requires authorization, proceed to tools
         logger.info("🔧 Proceeding to tool execution")
-        return "tools"
+        return "tools"  # Proceed to tool execution if no authorization is needed
 
     logger.debug("🔄 Ending workflow: No tool calls present")
     return END  # End the workflow if no tool calls are present
@@ -216,6 +163,12 @@ def authorize(
     state: MessagesState, *, config: RunnableConfig | None = None
 ) -> dict[str, list[Any]]:
     """Handle authorization for tools that require it.
+
+    This function:
+    1. Checks if tools in the last message require authorization
+    2. Attempts to authorize each tool
+    3. If authorization is pending, interrupts with auth URL
+    4. If all tools are authorized, continues the workflow
 
     Args:
         state: Current conversation state
@@ -235,37 +188,24 @@ def authorize(
     if not isinstance(state["messages"][-1], AIMessage):
         return {"messages": state["messages"]}
 
-    # Track if any tool needs authorization
-    needs_auth = False
-    auth_url = None
-
-    # Get tool calls from additional_kwargs
-    last_message = state["messages"][-1]
-    tool_calls = last_message.additional_kwargs.get("tool_calls", [])
-
-    for tool_call in tool_calls:
-        tool_name = tool_call["function"]["name"]
+    for tool_call in state["messages"][-1].tool_calls:
+        tool_name = tool_call["name"]
         if not tool_manager.requires_auth(tool_name):
             continue
-        needs_auth = True
         auth_response: AuthorizationResponse = tool_manager.authorize(
             tool_name, user_id
         )
         if auth_response.status != "completed":
+            # Immediately interrupt with the authorization URL
             if not auth_response.url:
                 raise ValueError("No authorization URL returned")
-            auth_url = auth_response.url
-            break
-
-    if needs_auth and auth_url:
-        # Send interrupt with authorization URL
-        raise interrupt(
-            {
-                "message": f"Visit the following URL to authorize: {auth_url}",
-                "auth_url": auth_url,
-                "type": "authorization",
-            }
-        )
+            raise interrupt(
+                {
+                    "message": f"Visit the following URL to authorize: {auth_response.url}",
+                    "auth_url": auth_response.url,
+                    "type": "authorization",
+                }
+            )
 
     # If we get here, all tools are authorized
     logger.info("🔐 All required tools are authorized")
@@ -286,39 +226,14 @@ def handle_tools(state: MessagesState) -> dict[str, Sequence[BaseMessage]]:
     Returns:
         dict: Updated state with tool responses
     """
-    messages = state["messages"]
-    if not isinstance(messages[-1], AIMessage):
-        return {"messages": messages}
+    if not isinstance(state["messages"][-1], AIMessage):
+        return {"messages": state["messages"]}
 
-    # Get tool calls from additional_kwargs
-    tool_calls = messages[-1].additional_kwargs.get("tool_calls", [])
-    if not tool_calls:
-        return {"messages": messages}
-
-    # Convert tool calls to the format expected by ToolNode
-    converted_message = AIMessage(
-        content=messages[-1].content,
-        tool_calls=[
-            {
-                "name": tool_call["function"]["name"],
-                "args": json.loads(
-                    tool_call["function"]["arguments"]
-                ),  # Use json.loads instead of eval
-                "id": tool_call["id"],
-                "type": "tool_call",  # Use "tool_call" type consistently
-            }
-            for tool_call in tool_calls
-        ],
-    )
-
-    # Create a new state with the converted message
-    tool_state = {"messages": [*messages[:-1], converted_message]}
-
-    # Execute tools using the global ToolNode
-    tool_response = tool_node.invoke(tool_state)
+    # Get the tool responses from the tool node
+    tool_response = tool_node.invoke(state)
 
     # Combine existing messages with tool responses
-    return {"messages": [*messages, *tool_response["messages"]]}
+    return {"messages": [*state["messages"], *tool_response["messages"]]}
 
 
 # Build the workflow graph using StateGraph
@@ -327,9 +242,7 @@ workflow = StateGraph(MessagesState, AgentConfigurable)
 # Add nodes (steps) to the graph
 workflow.add_node("agent", call_agent)
 workflow.add_node("authorization", authorize)
-workflow.add_node(
-    "tools", handle_tools
-)  # Use handle_tools instead of tool_node directly
+workflow.add_node("tools", tool_node)
 
 # Define the edges and control flow between nodes
 workflow.add_edge(START, "agent")
@@ -343,24 +256,7 @@ workflow.add_edge("tools", "agent")
 memory = MemorySaver()
 
 # Compile the graph with the checkpointer
-graph: CompiledStateGraph = workflow.compile(checkpointer=memory)
-
-
-def load_chat_model(model_name: str) -> ChatOpenAI:
-    """Load and configure a chat model.
-
-    Args:
-        model_name: Name of the model to load
-
-    Returns:
-        Configured chat model
-    """
-    return ChatOpenAI(
-        model=model_name,
-        temperature=0,
-        streaming=True,
-    )
-
+graph = workflow.compile(checkpointer=memory)
 
 if __name__ == "__main__":
     # Generate visual representations of the graph
