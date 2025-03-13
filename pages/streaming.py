@@ -45,7 +45,7 @@ st.selectbox(
 
 def handle_stream_response(
     response: Iterator[dict[str, Any] | Any], config: RunnableConfig
-):
+) -> None:
     """Handle streaming response, including interrupts for authorization."""
     try:
         for chunk in response:

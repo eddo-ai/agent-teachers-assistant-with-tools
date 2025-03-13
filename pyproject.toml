@@ -13,7 +13,8 @@ dependencies = [
     "langchain-arcade>=1.1.0",
     "langgraph-sdk>=0.1.51",
     "streamlit>=1.43.2",
-    "langgraph>=0.2.76"
+    "langgraph>=0.2.76",
+    "langgraph-prebuilt>=0.1.2",
 ]
 
 [project.optional-dependencies]
@@ -75,8 +76,3 @@ namespace_packages = true
 explicit_package_bases = true
 mypy_path = "src"
 
-[tool.uv]
-dev-dependencies = [
-    "langgraph-cli[inmem]>=0.1.76",
-    "langgraph>=0.1.76",
-]

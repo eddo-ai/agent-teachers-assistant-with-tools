@@ -29,7 +29,12 @@ from typing import Any, Callable, Dict, Sequence, Union, cast
 
 from arcadepy.types.shared.authorization_response import AuthorizationResponse
 from langchain_arcade import ArcadeToolManager
-from langchain_core.messages import AIMessage, AnyMessage, BaseMessage, ToolMessage
+from langchain_core.messages import (
+    AIMessage,
+    AnyMessage,
+    BaseMessage,
+    ToolMessage,
+)
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import BaseTool
 from langchain_openai import ChatOpenAI
@@ -82,6 +87,46 @@ model = ChatOpenAI(
 )
 
 
+def process_messages(messages: Sequence[BaseMessage]) -> list[BaseMessage]:
+    """Process messages to ensure they are in the correct format for the agent.
+
+    Args:
+        messages: The messages to process
+
+    Returns:
+        The processed messages
+    """
+    processed_messages: list[BaseMessage] = []
+
+    logger.debug(f"Processing {len(messages)} messages")
+    for msg in messages:
+        if isinstance(msg, ToolMessage):
+            logger.debug(f"Processing tool message: {msg.name}")
+            # Ensure tool message content is a string
+            content: str = ""
+            msg_content: Any = msg.content
+
+            # Handle different content types
+            if isinstance(msg_content, dict):
+                content = json.dumps(msg_content, indent=2)
+            else:
+                content = str(msg_content)
+
+            processed_messages.append(
+                ToolMessage(
+                    content=content,
+                    name=msg.name,
+                    tool_call_id=msg.tool_call_id,
+                    status=msg.status,
+                )
+            )
+        else:
+            # For non-tool messages, preserve the original format
+            processed_messages.append(msg)
+
+    return processed_messages
+
+
 def call_agent(
     state: MessagesState, *, config: RunnableConfig | None = None
 ) -> MessagesState:
@@ -95,28 +140,7 @@ def call_agent(
         Updated conversation state with agent's response
     """
     messages = state["messages"]
-    processed_messages = []
-
-    logger.debug(f"Processing {len(messages)} messages")
-    for msg in messages:
-        if isinstance(msg, ToolMessage):
-            logger.debug(f"Processing tool message: {msg.name}")
-            # Ensure tool message content is a string
-            if isinstance(msg.content, dict):
-                content = json.dumps(msg.content, indent=2)
-            else:
-                content = str(msg.content)
-            processed_messages.append(
-                ToolMessage(
-                    content=content,
-                    name=msg.name,
-                    tool_call_id=msg.tool_call_id,
-                    status=msg.status,
-                )
-            )
-        else:
-            # For non-tool messages, preserve the original format
-            processed_messages.append(msg)
+    processed_messages = process_messages(messages)
 
     try:
         # Use model from config if available, otherwise use default model
@@ -124,28 +148,19 @@ def call_agent(
         model_name = configurable.get("model")
         current_model = load_chat_model(model_name) if model_name else model
 
-        # Try to handle both parameter naming conventions
-        # Some models (especially mocks in tests) expect 'messages' parameter
-        # while LangChain models expect 'input' parameter
-        try:
-            # First try with 'messages' parameter (for test mocks)
-            response = current_model.invoke(
-                messages=processed_messages,
-                config=RunnableConfig(
-                    configurable={"tools": tool_manager.get_tools(), "stream": False}
-                ),
-            )
-        except TypeError:
-            # Fall back to 'input' parameter (for LangChain models)
-            response = current_model.invoke(
-                input=processed_messages,
-                config=RunnableConfig(
-                    configurable={"tools": tool_manager.get_tools(), "stream": False}
-                ),
-            )
+        # Invoke the model with the processed messages
+        # Following LangGraph SDK best practices
+        response = current_model.invoke(
+            input=processed_messages,
+            config=RunnableConfig(
+                configurable={"tools": tool_manager.get_tools(), "stream": False}
+            ),
+        )
 
         logger.debug(f"Model response: {response}")
-        return MessagesState(messages=cast(list[AnyMessage], messages + [response]))
+        return MessagesState(
+            messages=cast(list[AnyMessage], processed_messages + [response])
+        )
     except Exception as e:
         logger.error(f"Error calling model: {e}")
         raise

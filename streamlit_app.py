@@ -55,34 +55,34 @@ with st.sidebar:
 st.title("Agent Arcade Tools Chat 🤖")
 
 # Initialize messages
-thread_state: ThreadState = sync_client.threads.get_state(st.session_state.thread_id)
-values = cast(Dict[str, Any], thread_state.get("values"))
+current_thread_state: ThreadState = sync_client.threads.get_state(
+    st.session_state.thread_id
+)
+values = cast(Dict[str, Any], current_thread_state.get("values"))
 if values is not None:
     messages = values.get("messages", [])
-    # Display existing messages
-    for message in messages:
-        role = message.get("type", "")
-        content = message.get("content", "")
-        metadata = message.get("response_metadata", {})
+    # Display messages from thread state
+    if messages:
+        for message in messages:
+            role = message.get("type", "")
+            content = message.get("content", "")
+            metadata = message.get("response_metadata", {})
 
-        if role == "user":
-            st.chat_message("user").write(content)
-        elif role == "ai":
-            with st.chat_message("assistant"):
-                st.write(content)
-                if metadata:
-                    with st.expander("Debug: Message Metadata", expanded=False):
-                        st.json(metadata)
-else:
-    st.chat_message("assistant").write("Hi there! What's going on?")
+            if role == "user":
+                st.chat_message("user").write(content)
+            elif role == "ai":
+                with st.chat_message("assistant"):
+                    st.write(content)
+                    if metadata:
+                        with st.expander("Debug: Message Metadata", expanded=False):
+                            st.json(metadata)
+    else:
+        st.chat_message("assistant").write("Hi there! What's going on?")
 
 
 # Stream event types
 class StreamEvent(Protocol):
     """Protocol for stream events from LangGraph."""
-
-    event: str
-    data: Any
 
 
 class StreamUpdate(TypedDict):

@@ -1,6 +1,6 @@
 """Tests for the Streamlit app."""
 
-from typing import Sequence, cast
+from typing import Any, Dict, Sequence
 from unittest.mock import MagicMock, patch
 
 from streamlit.testing.v1 import AppTest
@@ -17,8 +17,8 @@ def test_stream_handling() -> None:
     """Test that the stream handler correctly processes and displays messages."""
     at: AppTest = AppTest.from_file("streamlit_app.py")
 
-    # Mock LangGraph SDK responses with None values to trigger initial message
-    mock_thread_state = {"values": None}
+    # Mock LangGraph SDK responses with empty messages list to trigger initial message
+    mock_thread_state: Dict[str, Any] = {"values": {"messages": []}}
 
     with patch("langgraph_sdk.client.SyncLangGraphClient") as mock_client:
         # Configure mock client
@@ -35,7 +35,7 @@ def test_stream_handling() -> None:
             m for m in messages if m.name == "assistant"
         )
         assert assistant_message is not None
-        message_content = cast(str, assistant_message.markdown[0].value)
+        message_content = assistant_message.markdown[0].value
         assert "Hi there! What's going on?" in message_content
 
 
@@ -44,7 +44,9 @@ def test_chat_input() -> None:
     at = AppTest.from_file("streamlit_app.py")
 
     # Mock LangGraph SDK responses
-    mock_thread_state = {"values": {"messages": []}}  # Empty initial state
+    mock_thread_state: Dict[str, Any] = {
+        "values": {"messages": []}
+    }  # Empty initial state
 
     with patch("langgraph_sdk.client.SyncLangGraphClient") as mock_client:
         # Configure mock client
@@ -67,7 +69,7 @@ def test_chat_input() -> None:
         messages: Sequence[ChatMessage] = at.chat_message
         user_message: ChatMessage = next(m for m in messages if m.name == "user")
         assert user_message is not None
-        message_content: str = cast(str, user_message.markdown[0].value)
+        message_content: str = user_message.markdown[0].value
         assert test_message in message_content
 
 
@@ -76,7 +78,9 @@ def test_error_handling() -> None:
     at: AppTest = AppTest.from_file("streamlit_app.py")
 
     # Mock LangGraph SDK responses
-    mock_thread_state = {"values": {"messages": []}}  # Empty initial state
+    mock_thread_state: Dict[str, Any] = {
+        "values": {"messages": []}
+    }  # Empty initial state
 
     with patch("langgraph_sdk.client.SyncLangGraphClient") as mock_client:
         # Configure mock client
@@ -105,7 +109,9 @@ def test_initial_state() -> None:
     at: AppTest = AppTest.from_file("streamlit_app.py")
 
     # Mock LangGraph SDK responses
-    mock_thread_state = {"values": {"messages": []}}  # Empty initial state
+    mock_thread_state: Dict[str, Any] = {
+        "values": {"messages": []}
+    }  # Empty initial state
 
     with patch("langgraph_sdk.client.SyncLangGraphClient") as mock_client:
         # Configure mock client
@@ -133,7 +139,7 @@ def test_message_roles_with_mock_langgraph() -> None:
     at: AppTest = AppTest.from_file("streamlit_app.py")
 
     # Mock LangGraph SDK responses
-    mock_thread_state = {
+    mock_thread_state: Dict[str, Any] = {
         "values": {
             "messages": [
                 {"type": "user", "content": "Hello!", "response_metadata": {}},
@@ -178,19 +184,15 @@ def test_message_roles_with_mock_langgraph() -> None:
         # Check user messages
         user_messages = [m for m in messages if m.name == "user"]
         assert len(user_messages) == 2
-        assert "Hello!" in cast(str, user_messages[0].markdown[0].value)
-        assert "What tools do you have?" in cast(
-            str, user_messages[1].markdown[0].value
-        )
+        assert "Hello!" in user_messages[0].markdown[0].value
+        assert "What tools do you have?" in user_messages[1].markdown[0].value
 
         # Check assistant messages
         assistant_messages = [m for m in messages if m.name == "assistant"]
         assert len(assistant_messages) == 2
-        assert "Hi! How can I help?" in cast(
-            str, assistant_messages[0].markdown[0].value
-        )
-        assert "I have several tools available." in cast(
-            str, assistant_messages[1].markdown[0].value
+        assert "Hi! How can I help?" in assistant_messages[0].markdown[0].value
+        assert (
+            "I have several tools available." in assistant_messages[1].markdown[0].value
         )
 
         # Check metadata expanders
@@ -202,11 +204,11 @@ def test_message_roles_with_mock_langgraph() -> None:
 
         # Verify metadata content
         # Note: Streamlit's json element returns a string, so we need to check the string content
-        first_metadata_str = cast(str, metadata_expanders[0].json[0].value)
+        first_metadata_str = metadata_expanders[0].json[0].value
         assert '"model_name": "test-model"' in first_metadata_str
         assert '"total": 10' in first_metadata_str
 
-        second_metadata_str = cast(str, metadata_expanders[1].json[0].value)
+        second_metadata_str = metadata_expanders[1].json[0].value
         assert '"model_name": "test-model"' in second_metadata_str
         assert '"total": 15' in second_metadata_str
         assert '"tools_used": ["search", "code"]' in second_metadata_str
