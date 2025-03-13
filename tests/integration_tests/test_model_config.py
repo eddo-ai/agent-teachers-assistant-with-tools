@@ -8,7 +8,7 @@ from dotenv import load_dotenv
 from langchain_core.runnables import RunnableConfig
 from langsmith import Client
 
-from agent_arcade_tools.backend.configuration import AgentConfigurable
+from agent_arcade_tools.configuration import AgentConfigurable
 
 # Load environment variables from .env file
 load_dotenv()

@@ -1,6 +1,5 @@
-"""Agent Arcade Tools package for managing AI agents and tools."""
+"""Backend package for agent_arcade_tools."""
 
+from agent_arcade_tools.backend.configuration import AgentConfigurable
 
-def hello() -> str:
-    """Return a greeting message from the agent-arcade-tools package."""
-    return "Hello from agent-arcade-tools!"
+__all__ = ["AgentConfigurable"]

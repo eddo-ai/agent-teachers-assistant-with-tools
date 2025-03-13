@@ -5,13 +5,17 @@ description = "Add your description here"
 readme = "README.md"
 requires-python = ">=3.12"
 dependencies = [
-    "langgraph>=0.2.6",
     "python-dotenv>=1.0.1",
     "langchain>=0.3.20",
     "openai>=1.65.3",
     "langchain-openai>=0.3.7",
     "langchain-community>=0.3.19",
     "langchain-arcade>=1.1.0",
+    "langgraph-sdk>=0.1.51",
+    "streamlit>=1.43.2",
+    "langgraph>=0.2.76",
+    "langgraph-prebuilt>=0.1.2",
+    "arcade-ai>=1.0.5",
 ]
 
 [project.optional-dependencies]
@@ -75,5 +79,6 @@ mypy_path = "src"
 
 [tool.uv]
 dev-dependencies = [
-    "langgraph-cli[inmem]>=0.1.74",
+    "langgraph-cli[inmem]>=0.1.76",
 ]
+

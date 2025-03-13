@@ -5,106 +5,111 @@
 
 This is a proof of concept demonstrating an agent that combines [LangGraph](https://github.com/langchain-ai/langgraph) with [Arcade Tools](https://github.com/langchain-ai/langchain-arcade) and Azure Search to create an intelligent assistant capable of retrieving and processing instructional materials.
 
-## What it does
-
-The agent:
-
-1. Takes a user **query** as input
-2. Uses Azure Search to find relevant instructional materials
-3. Processes the query using Arcade Tools for enhanced capabilities
-4. Returns relevant information and materials to the user
-
 ## Features
 
-- Integration with Azure Search for semantic search capabilities
+- Integration with LangGraph SDK for workflow management
 - Arcade Tools integration for enhanced agent capabilities
-- Asynchronous processing for better performance
-- Configurable system prompts and model selection
-- Built with LangGraph for flexible workflow management
+- Azure OpenAI integration for language model capabilities
+- Streamlit-based chat interface with real-time updates
+- Support for tool calls and authorization flows
+- Built-in debugging and tracing with LangSmith
 
 ## Getting Started
 
-1. Create a `.env` file:
+1. Clone the repository:
+
+```bash
+git clone https://github.com/yourusername/agent-arcade-tools.git
+cd agent-arcade-tools
+```
+
+2. Create and activate a Python virtual environment:
+
+```bash
+python -m venv .venv
+source .venv/bin/activate  # On Windows: .venv\Scripts\activate
+```
+
+3. Install dependencies using UV:
+
+```bash
+pip install uv
+uv pip install -e .
+```
+
+4. Set up environment variables:
 
 ```bash
 cp .env.example .env
 ```
 
-2. Define required environment variables in your `.env` file:
+Edit `.env` with your API keys and configuration:
 
-```env
-# Azure Search Configuration
-AZURE_AI_SEARCH_ENDPOINT=your_azure_search_endpoint
-AZURE_AI_SEARCH_API_KEY=your_azure_search_api_key
-AZURE_AI_SEARCH_INDEX_NAME=your_index_name
-AZURE_SEARCH_SEMANTIC_CONFIGURATION_NAME=unit_lesson
+- LangGraph API configuration
+- Azure OpenAI or OpenAI API keys
+- Arcade Tools API key
+- User configuration
+- (Optional) LangSmith configuration for debugging
 
-# OpenAI Configuration
-OPENAI_API_KEY=your_openai_api_key
-
-# Arcade Tools Configuration
-ARCADE_API_KEY=your_arcade_api_key
-```
-
-3. Install dependencies:
+5. Run the Streamlit app:
 
 ```bash
-uv pip install -e .
-```
-
-4. Run tests:
-
-```bash
-python -m pytest tests/ -v
+streamlit run streamlit_app.py
 ```
 
 ## Architecture
 
-The project is structured around several key components:
+The project uses a LangGraph-based architecture with the following components:
 
-- `src/agent_arcade_tools/graph.py`: Defines the main workflow using LangGraph
-- `src/agent_arcade_tools/configuration.py`: Handles configuration and settings
-- `src/agent_arcade_tools/tools.py`: Contains tool definitions and implementations
-- `src/agent_arcade_tools/state.py`: Manages state throughout the workflow
+- `streamlit_app.py`: Main chat interface using Streamlit
+- `src/agent_arcade_tools/`:
+  - `graph.py`: LangGraph workflow definition
+  - `configuration.py`: Configuration management
+  - `state.py`: State management for the agent
+  - `tools.py`: Tool implementations
+  - `prompts.py`: System prompts and templates
 
 ## Development
 
-The project uses:
+The project uses modern Python development tools:
 
-- `uv` for Python package management
+- `uv` for dependency management
 - `pytest` for testing
-- `langgraph` for workflow management
-- `langchain-arcade` for Arcade Tools integration
-- Azure Search for semantic search capabilities
+- `ruff` for linting
+- `mypy` for type checking
 
-## Testing
-
-The project includes both unit and integration tests:
-
-- Unit tests verify individual components
-- Integration tests ensure the entire workflow functions correctly
-
-Run tests with:
+### Running Tests
 
 ```bash
-python -m pytest tests/ -v
+python -m pytest tests/
+```
+
+### Type Checking
+
+```bash
+mypy src/
+```
+
+### Linting
+
+```bash
+ruff check src/
 ```
 
 ## Contributing
 
 1. Fork the repository
 2. Create a feature branch
-3. Commit your changes
-4. Push to the branch
-5. Create a Pull Request
-
-## TODO
-
-- [ ] Implement server-side user_id validation
-  - Add validation middleware
-  - Ensure user_id is present and valid before processing requests
-  - Add appropriate error handling for invalid user_ids
+3. Make your changes
+4. Run tests and type checking
+5. Submit a pull request
 
 ## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+MIT License - see LICENSE file for details.
+
+## Acknowledgments
+
+- [LangGraph](https://github.com/langchain-ai/langgraph) for the workflow engine
+- [Arcade Tools](https://github.com/langchain-ai/langchain-arcade) for enhanced agent capabilities
+- [Streamlit](https://streamlit.io/) for the web interface
