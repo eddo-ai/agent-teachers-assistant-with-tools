@@ -1,1 +1,23 @@
-- always check LangGraph SDK documentation, which is provided as a tool
+- dependency management:
+  - Python:
+    - use `uv` for Python package management
+    - NEVER modify `pyproject.toml` directly - always use `uv` commands
+    - use `uv add <package>` to add dependencies
+    - use `uv add -U <package>` to upgrade dependencies
+    - use `uv pip install -e ".[dev]"` to install dev dependencies
+    - always commit both `pyproject.toml` and `uv.lock`
+  - Environment:
+    - document all required variables in `.env.example`
+
+- documentation:
+  - always check `LangGraph Python SDK` for the latest documentation and code references
+
+- running the app:
+  1. Start LangGraph server:
+     ```bash
+     langgraph dev
+     ```
+  2. Start Streamlit app:
+     ```bash
+     uv run streamlit run streamlit_app.py --server.port 8502
+     ```

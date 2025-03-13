@@ -8,7 +8,7 @@ from typing import Annotated, Literal, Optional
 
 from langchain_core.runnables import RunnableConfig, ensure_config
 
-from agent_arcade_tools.backend import prompts
+from agent_arcade_tools import prompts
 
 LogLevel = Literal["DEBUG", "INFO", "WARNING", "ERROR", "CRITICAL"]
 
