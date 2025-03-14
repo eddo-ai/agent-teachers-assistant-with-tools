@@ -27,8 +27,8 @@ import os
 from typing import Any, Callable, Dict, Sequence, Union, cast
 
 from arcadepy.types.shared.authorization_response import AuthorizationResponse
-from langchain_arcade import ArcadeToolManager
-from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
+from langchain_arcade import ToolManager
+from langchain_core.messages import AIMessage, BaseMessage
 from langchain_core.runnables import Runnable, RunnableConfig
 from langchain_core.tools import BaseTool
 from langgraph.checkpoint.memory import MemorySaver
@@ -42,7 +42,34 @@ from agent_arcade_tools.utils import load_chat_model
 
 # Configure logging
 logger = logging.getLogger(__name__)
-formatter = logging.Formatter("%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+
+
+class ColoredFormatter(logging.Formatter):
+    """Custom formatter adding colors and structure to log messages."""
+
+    grey = "\x1b[38;20m"
+    yellow = "\x1b[33;20m"
+    red = "\x1b[31;20m"
+    bold_red = "\x1b[31;1m"
+    blue = "\x1b[34;20m"
+    reset = "\x1b[0m"
+
+    FORMATS = {
+        logging.DEBUG: f"{grey}🔍 %(asctime)s - %(name)s - %(levelname)s - %(message)s{reset}",
+        logging.INFO: f"{blue}ℹ️  %(asctime)s - %(name)s - %(levelname)s - %(message)s{reset}",
+        logging.WARNING: f"{yellow}⚠️  %(asctime)s - %(name)s - %(levelname)s - %(message)s{reset}",
+        logging.ERROR: f"{red}❌ %(asctime)s - %(name)s - %(levelname)s - %(message)s{reset}",
+        logging.CRITICAL: f"{bold_red}🚨 %(asctime)s - %(name)s - %(levelname)s - %(message)s{reset}",
+    }
+
+    def format(self, record: logging.LogRecord) -> str:
+        """Format the log record with the appropriate color and emoji."""
+        log_fmt = self.FORMATS.get(record.levelno)
+        formatter = logging.Formatter(log_fmt, datefmt="%Y-%m-%d %H:%M:%S")
+        return formatter.format(record)
+
+
+formatter = ColoredFormatter()
 handler = logging.StreamHandler()
 handler.setFormatter(formatter)
 logger.addHandler(handler)
@@ -62,14 +89,18 @@ def set_log_level(level: str) -> None:
 arcade_api_key: str | None = os.getenv("ARCADE_API_KEY")
 openai_api_key: str | None = os.getenv("OPENAI_API_KEY")
 
-tool_manager = ArcadeToolManager(api_key=cast(Dict[str, Any], arcade_api_key))
+tool_manager = ToolManager(api_key=cast(Dict[str, Any], arcade_api_key))
+tool_manager.init_tools(
+    toolkits=["Google", "Github", "Search", "Web", "CodeSandbox", "X"]
+)
 configuration = AgentConfigurable()
 
 # Retrieve tools compatible with LangGraph
 tools: Sequence[Union[BaseTool, Callable[..., Any]]] = [
     retrieve_instructional_materials,
-    *tool_manager.get_tools(toolkits=["Google", "Github", "Search"]),
+    *tool_manager.to_langchain(use_interrupts=True),
 ]
+logger.debug(f"🔧 Tools: {tools}")
 tool_node = ToolNode(tools)
 
 
@@ -91,6 +122,8 @@ def call_agent(
     Returns:
         dict: Updated state with the agent's response appended
     """
+    if len(state["messages"]) == 0:
+        return {"messages": [AIMessage(content="Hello! How can I help you today?")]}
     configurable: AgentConfigurable = AgentConfigurable.from_runnable_config(config)
     model: str = configurable.model
     logger.info(f"🤖 Using model: {model}")
@@ -138,24 +171,26 @@ def should_continue(state: MessagesState) -> str:
     last_message = state["messages"][-1]
 
     # If the last message is a ToolMessage, continue to agent
-    if isinstance(last_message, ToolMessage):
-        logger.debug("🔄 Tool message detected, continuing to agent")
+    if hasattr(last_message, "name") and hasattr(last_message, "tool_call_id"):
+        logger.info("🔧 Tool message received, continuing to agent")
         return "agent"
 
+    # If not an AI message, end the workflow
     if not isinstance(last_message, AIMessage):
-        logger.debug("🔄 Ending workflow: Last message is not an AI message")
         return END
 
-    if last_message.tool_calls:
-        logger.info(f"🔧 Found {len(last_message.tool_calls)} tool calls")
-        for tool_call in last_message.tool_calls:
-            if tool_manager.requires_auth(tool_call["name"]):
-                logger.info(f"🔐 Tool {tool_call['name']} requires authorization")
-                return "authorization"
-        logger.info("🔧 Proceeding to tool execution")
-        return "tools"  # Proceed to tool execution if no authorization is needed
+    # Check for tool calls in AI message
+    tool_calls = last_message.additional_kwargs.get("tool_calls", [])
 
-    logger.debug("🔄 Ending workflow: No tool calls present")
+    if tool_calls:
+        logger.info(f"🔧 Found {len(tool_calls)} tool calls")
+        for tool_call in tool_calls:
+            tool_name = tool_call.get("function", {}).get("name")
+            if tool_name and tool_manager.requires_auth(tool_name):
+                logger.info(f"🔐 Tool {tool_name} requires authorization")
+                return "authorization"
+        logger.info(" Proceeding to tool execution")
+        return "tools"  # Proceed to tool execution if no authorization is needed
     return END  # End the workflow if no tool calls are present
 
 
@@ -199,7 +234,7 @@ def authorize(
             # Immediately interrupt with the authorization URL
             if not auth_response.url:
                 raise ValueError("No authorization URL returned")
-            raise interrupt(
+            interrupt(
                 {
                     "message": f"Visit the following URL to authorize: {auth_response.url}",
                     "auth_url": auth_response.url,
@@ -208,7 +243,6 @@ def authorize(
             )
 
     # If we get here, all tools are authorized
-    logger.info("🔐 All required tools are authorized")
     return {"messages": state["messages"]}
 
 
