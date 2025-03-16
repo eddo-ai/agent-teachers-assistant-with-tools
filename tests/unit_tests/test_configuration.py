@@ -1,4 +1,4 @@
-from agent_arcade_tools.backend.configuration import AgentConfigurable
+from agent_arcade_tools.configuration import AgentConfigurable
 
 
 def test_configuration_empty() -> None:
