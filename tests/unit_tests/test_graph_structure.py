@@ -5,7 +5,7 @@ from typing import Dict, Literal, Optional, Protocol, Union
 from langgraph.graph import END, START, StateGraph
 from pydantic import BaseModel, Field
 
-from agent_arcade_tools.backend.graph import workflow
+from agent_arcade_tools.graph import workflow
 
 
 class NodeType(BaseModel):

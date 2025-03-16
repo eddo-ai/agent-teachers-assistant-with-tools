@@ -15,7 +15,7 @@ from streamlit.testing.v1.element_tree import (
 
 def test_stream_handling() -> None:
     """Test that the stream handler correctly processes and displays messages."""
-    at: AppTest = AppTest.from_file("streamlit_app.py")
+    at: AppTest = AppTest.from_file("src/streamlit_app.py")
 
     # Mock LangGraph SDK responses with empty messages list to trigger initial message
     mock_thread_state: Dict[str, Any] = {"values": {"messages": []}}
@@ -41,7 +41,7 @@ def test_stream_handling() -> None:
 
 def test_chat_input() -> None:
     """Test that the chat input correctly handles user messages."""
-    at = AppTest.from_file("streamlit_app.py")
+    at = AppTest.from_file("src/streamlit_app.py")
 
     # Mock LangGraph SDK responses
     mock_thread_state: Dict[str, Any] = {
@@ -75,7 +75,7 @@ def test_chat_input() -> None:
 
 def test_error_handling() -> None:
     """Test that errors are properly displayed."""
-    at: AppTest = AppTest.from_file("streamlit_app.py")
+    at: AppTest = AppTest.from_file("src/streamlit_app.py")
 
     # Mock LangGraph SDK responses
     mock_thread_state: Dict[str, Any] = {
@@ -106,7 +106,7 @@ def test_error_handling() -> None:
 
 def test_initial_state() -> None:
     """Test that the app initializes with correct state and UI elements."""
-    at: AppTest = AppTest.from_file("streamlit_app.py")
+    at: AppTest = AppTest.from_file("src/streamlit_app.py")
 
     # Mock LangGraph SDK responses
     mock_thread_state: Dict[str, Any] = {
@@ -136,7 +136,7 @@ def test_initial_state() -> None:
 
 def test_message_roles_with_mock_langgraph() -> None:
     """Test that messages are displayed properly with their roles when using mocked LangGraph SDK."""
-    at: AppTest = AppTest.from_file("streamlit_app.py")
+    at: AppTest = AppTest.from_file("src/streamlit_app.py")
 
     # Mock LangGraph SDK responses
     mock_thread_state: Dict[str, Any] = {
