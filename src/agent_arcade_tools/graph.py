@@ -33,6 +33,7 @@ from langchain_core.runnables import Runnable, RunnableConfig
 from langchain_core.tools import BaseTool
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, START, MessagesState, StateGraph
+from langgraph.graph.state import CompiledStateGraph
 from langgraph.prebuilt import ToolNode
 from langgraph.types import interrupt
 
@@ -290,7 +291,7 @@ workflow.add_edge("tools", "agent")
 memory = MemorySaver()
 
 # Compile the graph with the checkpointer
-graph = workflow.compile(checkpointer=memory)
+graph: CompiledStateGraph = workflow.compile(checkpointer=memory)
 
 if __name__ == "__main__":
     # Generate visual representations of the graph

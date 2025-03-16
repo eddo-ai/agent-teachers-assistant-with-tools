@@ -3,7 +3,7 @@
     "ENV PYTHONPATH=/app/src:$PYTHONPATH"
   ],
   "graphs": {
-    "graph": "agent_arcade_tools.graph:graph"
+    "agent": "agent_arcade_tools.graph:graph"
   },
   "env": ".env",
   "python_version": "3.12",
