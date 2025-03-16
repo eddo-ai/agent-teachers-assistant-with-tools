@@ -4,7 +4,7 @@ name: CI
 
 on:
   push:
-    branches: ["main"]
+    branches: ['main']
   pull_request:
   workflow_dispatch: # Allows triggering the workflow manually in GitHub UI
 
@@ -20,7 +20,7 @@ jobs:
     strategy:
       matrix:
         os: [ubuntu-latest]
-        python-version: ["3.11", "3.12"]
+        python-version: ['3.11', '3.12']
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -53,5 +53,5 @@ jobs:
           path: src/
       - name: Run tests with pytest
         run: |
-          uv pip install pytest
+          uv pip install pytest pytest-mock
           uv run pytest tests/unit_tests

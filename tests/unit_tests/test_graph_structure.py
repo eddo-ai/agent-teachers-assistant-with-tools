@@ -1,11 +1,22 @@
 """Tests for validating the LangGraph workflow structure."""
 
 from typing import Dict, Literal, Optional, Protocol, Union
+from unittest.mock import MagicMock
 
+import pytest
 from langgraph.graph import END, START, StateGraph
 from pydantic import BaseModel, Field
 
 from agent_arcade_tools.graph import workflow
+
+# Mock the arcade imports before importing our module
+pytest.importorskip("langchain_arcade")
+import sys
+
+sys.modules["langchain_arcade"] = MagicMock()
+sys.modules["langchain_arcade.manager"] = MagicMock()
+sys.modules["arcadepy"] = MagicMock()
+sys.modules["arcadepy._client"] = MagicMock()
 
 
 class NodeType(BaseModel):
