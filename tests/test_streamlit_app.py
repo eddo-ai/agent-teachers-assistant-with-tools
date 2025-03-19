@@ -20,11 +20,19 @@ def test_stream_handling() -> None:
     # Mock LangGraph SDK responses with empty messages list to trigger initial message
     mock_thread_state: Dict[str, Any] = {"values": {"messages": []}}
 
-    with patch("langgraph_sdk.client.SyncLangGraphClient") as mock_client:
+    # Mock both the client and RemoteGraph
+    with (
+        patch("langgraph_sdk.client.SyncLangGraphClient") as mock_client,
+        patch("langgraph.pregel.remote.RemoteGraph") as mock_graph,
+    ):
         # Configure mock client
         mock_client_instance = MagicMock()
         mock_client_instance.threads.get_state.return_value = mock_thread_state
         mock_client.return_value = mock_client_instance
+
+        # Configure mock graph
+        mock_graph_instance = MagicMock()
+        mock_graph.return_value = mock_graph_instance
 
         # Run the app
         at.run()
