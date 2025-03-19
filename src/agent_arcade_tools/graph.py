@@ -92,7 +92,7 @@ openai_api_key: str | None = os.getenv("OPENAI_API_KEY")
 
 tool_manager = ToolManager(api_key=cast(Dict[str, Any], arcade_api_key))
 tool_manager.init_tools(
-    toolkits=["Google", "Github", "Search", "Web", "CodeSandbox", "X"]
+    toolkits=["Google", "Github", "Search", "Web", "CodeSandbox", "X", "Slack"]
 )
 configuration = AgentConfigurable()
 
