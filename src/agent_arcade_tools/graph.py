@@ -28,7 +28,7 @@ from typing import Any, Callable, Dict, Sequence, Union, cast
 
 from arcadepy.types.shared.authorization_response import AuthorizationResponse
 from langchain_arcade import ToolManager
-from langchain_core.messages import AIMessage, BaseMessage
+from langchain_core.messages import AIMessage, BaseMessage, ToolMessage
 from langchain_core.runnables import Runnable, RunnableConfig
 from langchain_core.tools import BaseTool
 from langgraph.checkpoint.memory import MemorySaver
@@ -224,7 +224,45 @@ def authorize(
     if not isinstance(state["messages"][-1], AIMessage):
         return {"messages": state["messages"]}
 
-    for tool_call in state["messages"][-1].tool_calls:
+    # Check if we've already interrupted for authorization
+    last_message = state["messages"][-1]
+    if hasattr(
+        last_message, "additional_kwargs"
+    ) and last_message.additional_kwargs.get("__auth_interrupted__"):
+        # After an interrupt, check if authorization is now complete
+        for tool_call in last_message.tool_calls:
+            tool_name = tool_call["name"]
+            if not tool_manager.requires_auth(tool_name):
+                continue
+            auth_status_response: AuthorizationResponse = tool_manager.wait_for_auth(
+                last_message.additional_kwargs["__auth_id__"]
+            )
+            if auth_status_response.status == "pending":
+                # If still not completed, return a tool message error
+                return {
+                    "messages": [
+                        ToolMessage(
+                            name=tool_name,
+                            content="Authorization is still pending. Please wait a moment and ask again.",
+                            tool_call_id=tool_call["id"],
+                        )
+                    ]
+                }
+            elif auth_status_response.status == "failed":
+                return {
+                    "messages": [
+                        ToolMessage(
+                            name=tool_name,
+                            content="Authorization failed. Please try again.",
+                            tool_call_id=tool_call["id"],
+                        )
+                    ]
+                }
+        # If we get here, all tools are now authorized
+        return {"messages": state["messages"]}
+
+    # Initial authorization check
+    for tool_call in last_message.tool_calls:
         tool_name = tool_call["name"]
         if not tool_manager.requires_auth(tool_name):
             continue
@@ -235,11 +273,17 @@ def authorize(
             # Immediately interrupt with the authorization URL
             if not auth_response.url:
                 raise ValueError("No authorization URL returned")
+
+            # Mark the message as having interrupted for auth and store the auth ID
+            last_message.additional_kwargs["__auth_interrupted__"] = True
+            last_message.additional_kwargs["__auth_id__"] = auth_response.id
+
             interrupt(
                 {
-                    "message": f"Visit the following URL to authorize: {auth_response.url}",
+                    "message": "Authorization is required. Click Authorize to sign in and give permission.",
                     "auth_url": auth_response.url,
                     "type": "authorization",
+                    "auth_id": auth_response.id,
                 }
             )
 

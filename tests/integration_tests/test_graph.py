@@ -339,9 +339,10 @@ def test_authorized_complete_flow() -> None:
                 found_interrupt = True
                 interrupt = chunk["__interrupt__"][0]
                 assert interrupt.value == {
-                    "message": "Visit the following URL to authorize: http://auth.test.url",
+                    "message": "Authorization is required. Click Authorize to sign in and give permission.",
                     "auth_url": "http://auth.test.url",
                     "type": "authorization",
+                    "auth_id": "test-auth-id",
                 }
                 assert interrupt.resumable is True
                 assert interrupt.when == "during"
