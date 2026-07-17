@@ -31,10 +31,12 @@ from langgraph.prebuilt import ToolNode
 from langgraph.types import interrupt
 
 from agent_arcade_tools.graph import (
+    authorize,
     call_agent,
     graph,
     handle_tools,
     should_continue,
+    should_continue_after_authorization,
     tool_manager,
 )
 
@@ -339,9 +341,10 @@ def test_authorized_complete_flow() -> None:
                 found_interrupt = True
                 interrupt = chunk["__interrupt__"][0]
                 assert interrupt.value == {
-                    "message": "Visit the following URL to authorize: http://auth.test.url",
+                    "message": "Authorization is required. Click Authorize to sign in and give permission.",
                     "auth_url": "http://auth.test.url",
                     "type": "authorization",
+                    "auth_id": "test-auth-id",
                 }
                 assert interrupt.resumable is True
                 assert interrupt.when == "during"
@@ -351,6 +354,61 @@ def test_authorized_complete_flow() -> None:
         assert auth_call_count == 1, (
             f"Expected exactly one auth call but got {auth_call_count}"
         )
+
+
+@pytest.mark.parametrize(
+    ("auth_status", "expected_content"),
+    [
+        (
+            "pending",
+            "Authorization is still pending. Please wait a moment and ask again.",
+        ),
+        ("failed", "Authorization failed. Please try again."),
+    ],
+)
+def test_resumed_pending_auth_routes_back_to_agent(
+    auth_status: str, expected_content: str
+) -> None:
+    """Test that incomplete resumed auth does not route into ToolNode."""
+    ai_message = AIMessage(
+        content="",
+        additional_kwargs={
+            "__auth_interrupted__": True,
+            "__auth_id__": "test-auth-id",
+        },
+        tool_calls=[
+            {
+                "name": "Google_ListEmails",
+                "args": {"n_emails": 5},
+                "id": "call_uh9TLO9zSlDbMppVD6w8YYU2",
+                "type": "tool_call",
+            }
+        ],
+    )
+    state = MessagesState(messages=[HumanMessage(content="check email"), ai_message])
+    config: RunnableConfig = {
+        "configurable": {
+            "user_id": "test-user",
+        }
+    }
+
+    with (
+        patch.object(tool_manager, "requires_auth", return_value=True),
+        patch.object(
+            tool_manager,
+            "wait_for_auth",
+            return_value=MockAuthResponse(status=auth_status),
+        ),
+    ):
+        result = authorize(state, config=config)
+
+    assert len(result["messages"]) == 1
+    auth_message = result["messages"][0]
+    assert isinstance(auth_message, ToolMessage)
+    assert auth_message.content == expected_content
+
+    next_state = MessagesState(messages=[*state["messages"], auth_message])
+    assert should_continue_after_authorization(next_state) == "agent"
 
 
 def test_email_check_flow() -> None:
