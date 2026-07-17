@@ -315,6 +315,16 @@ def handle_tools(state: MessagesState) -> dict[str, Sequence[BaseMessage]]:
     return {"messages": [*state["messages"], *tool_response["messages"]]}
 
 
+def should_continue_after_authorization(state: MessagesState) -> str:
+    """Route authorization results to the next safe node."""
+    last_message = state["messages"][-1]
+    if isinstance(last_message, AIMessage):
+        return "tools"
+    if isinstance(last_message, ToolMessage):
+        return "agent"
+    return END
+
+
 # Build the workflow graph using StateGraph
 workflow = StateGraph(MessagesState, AgentConfigurable)
 
@@ -328,7 +338,9 @@ workflow.add_edge(START, "agent")
 workflow.add_conditional_edges(
     "agent", should_continue, ["authorization", "tools", END]
 )
-workflow.add_edge("authorization", "tools")
+workflow.add_conditional_edges(
+    "authorization", should_continue_after_authorization, ["agent", "tools", END]
+)
 workflow.add_edge("tools", "agent")
 
 # Set up memory for checkpointing the state

@@ -87,11 +87,11 @@ def test_graph_structure() -> None:
         ],
         edges=[
             Edge(source=START, target="agent"),
-            Edge(source="authorization", target="tools"),
             Edge(source="tools", target="agent"),
         ],
         conditional_edges={
             "agent": ["authorization", "tools", END],
+            "authorization": ["agent", "tools", END],
         },
     )
 
@@ -154,4 +154,13 @@ def test_graph_structure() -> None:
     expected_edges = set(expected_structure.conditional_edges["agent"])
     assert agent_edges == expected_edges, (
         f"Incorrect conditional edges from agent node. Expected {expected_edges}, got {agent_edges}"
+    )
+
+    authorization_edges = {"agent", "tools", END}
+    expected_authorization_edges = set(
+        expected_structure.conditional_edges["authorization"]
+    )
+    assert authorization_edges == expected_authorization_edges, (
+        "Incorrect conditional edges from authorization node. "
+        f"Expected {expected_authorization_edges}, got {authorization_edges}"
     )
